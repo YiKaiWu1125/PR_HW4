@@ -112,7 +112,7 @@ def main():
     scaler = GradScaler()
     # delete 
     import random
-    num_epochs = random.randint(5, 30)
+    num_epochs = random.randint(5, 20)
     #num_epochs = 1
 
     model.train()
