@@ -3,7 +3,7 @@ import pickle
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, random_split
 from torchvision import transforms, models
 from torchvision.models import ResNet18_Weights
 import pandas as pd
@@ -96,11 +96,13 @@ def main():
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     ])
 
-    train_dataset = BagDataset(root_dir=r'C:\Users\吳澄秋\Desktop\data\PR_HW4\released\train', transform=transform)
-    train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True)  # Batch size is 1 since each bag is a batch
+    dataset = BagDataset(root_dir=r'C:\Users\YK\Desktop\1hw4\PR_HW4\released\train', transform=transform)
+    train_size = int(0.8 * len(dataset))
+    val_size = len(dataset) - train_size
+    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
 
-    test_dataset = BagDataset(root_dir=r'C:\Users\吳澄秋\Desktop\data\PR_HW4\released\test', transform=transform, is_test=True)
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = BagClassifier().to(device)
@@ -108,7 +110,10 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
     scaler = GradScaler()
-    num_epochs = 10
+    # delete 
+    import random
+    num_epochs = random.randint(5, 30)
+    #num_epochs = 1
 
     model.train()
     for epoch in range(num_epochs):
@@ -135,14 +140,30 @@ def main():
         train_accuracy = correct_train / total_train
         print(f'Epoch [{epoch + 1}/{num_epochs}], Loss: {running_loss / len(train_loader)}, Accuracy: {train_accuracy}')
 
-    torch.save(model.state_dict(), 'model_weights.pth')
+        model.eval()
+        correct_val = 0
+        total_val = 0
+        with torch.no_grad():
+            for images, labels, _ in val_loader:
+                images, labels = images.to(device), labels.to(device)
+                with autocast():
+                    outputs = model(images)
+                correct_val += calculate_accuracy(outputs, labels.float().unsqueeze(1))
+                total_val += 1
+
+        val_accuracy = correct_val / total_val
+        print(f'Validation Accuracy: {val_accuracy}')
+        model.train()
+
+    torch.save(model.state_dict(), f'ouput_weights\{val_accuracy}_{num_epochs}_odel_weight.pth')
+
+    test_dataset = BagDataset(root_dir=r'C:\Users\YK\Desktop\1hw4\PR_HW4\released\test', transform=transform, is_test=True)
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
     model.eval()
     predictions = []
     image_ids = []
     with torch.no_grad():
-        correct_val = 0
-        total_val = 0
         for images, _, file_name in tqdm(test_loader, desc='Inference', unit='batch'):
             images = images.to(device)
             with autocast():
@@ -151,17 +172,10 @@ def main():
             predictions.extend(preds)
             image_ids.append(file_name[0])  # Use file_name[0] to get the string part of the tuple
 
-            labels_dummy = torch.zeros_like(outputs).to(device)  # Dummy labels for test set
-            correct_val += calculate_accuracy(outputs, labels_dummy)
-            total_val += 1
-
-        val_accuracy = correct_val / total_val
-        print(f'Validation Accuracy: {val_accuracy}')
-
     predictions = [1 if p >= 0.5 else 0 for p in predictions]
     image_ids = [file_name.split('.')[0] for file_name in image_ids]  # Remove .pkl extension
     submission = pd.DataFrame({'image_id': image_ids, 'y_pred': predictions})
-    submission.to_csv('submission.csv', index=False)
+    submission.to_csv(f'output/{val_accuracy}_{num_epochs}_submission.csv', index=False)
 
 if __name__ == "__main__":
     main()
