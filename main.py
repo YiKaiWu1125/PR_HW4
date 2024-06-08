@@ -5,10 +5,11 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, models
-from torchvision.models import ResNet50_Weights
+from torchvision.models import ResNet18_Weights
 import pandas as pd
 from tqdm import tqdm
 import numpy as np
+from torch.cuda.amp import GradScaler, autocast
 
 class BagDataset(Dataset):
     def __init__(self, root_dir, transform=None, is_test=False):
@@ -56,23 +57,29 @@ class BagDataset(Dataset):
 class BagClassifier(nn.Module):
     def __init__(self):
         super(BagClassifier, self).__init__()
-        self.feature_extractor = models.resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
+        self.feature_extractor = models.resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
         self.feature_extractor.fc = nn.Identity()  # Remove the final layer
         self.classifier = nn.Sequential(
-            nn.Linear(2048, 512),
+            nn.Linear(512, 128),
             nn.ReLU(),
             nn.Dropout(0.5),
-            nn.Linear(512, 1)
+            nn.Linear(128, 1)
         )
 
     def forward(self, x):
         batch_size, num_images, c, h, w = x.size()
         x = x.view(batch_size * num_images, c, h, w)
-        features = self.feature_extractor(x)
+        with autocast():
+            features = self.feature_extractor(x)
         features = features.view(batch_size, num_images, -1)
         features = features.max(dim=1)[0]  # Max pooling over all images in the bag
         output = self.classifier(features)
         return output
+
+def calculate_accuracy(outputs, labels):
+    preds = torch.sigmoid(outputs) >= 0.5
+    correct = (preds == labels).sum().item()
+    return correct / len(labels)
 
 def main():
     print("CUDA available:", torch.cuda.is_available())
@@ -82,17 +89,17 @@ def main():
 
     transform = transforms.Compose([
         transforms.ToPILImage(),
-        transforms.Resize((224, 224)),
+        transforms.Resize((112, 112)),  # Reduce size here
         transforms.RandomHorizontalFlip(),
         transforms.RandomRotation(10),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     ])
 
-    train_dataset = BagDataset(root_dir=r'C:\Users\YK\Desktop\113HW4\released\train', transform=transform)
+    train_dataset = BagDataset(root_dir=r'C:\Users\吳澄秋\Desktop\data\PR_HW4\released\train', transform=transform)
     train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True)  # Batch size is 1 since each bag is a batch
 
-    test_dataset = BagDataset(root_dir=r'C:\Users\YK\Desktop\113HW4\released\test', transform=transform, is_test=True)
+    test_dataset = BagDataset(root_dir=r'C:\Users\吳澄秋\Desktop\data\PR_HW4\released\test', transform=transform, is_test=True)
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -100,22 +107,33 @@ def main():
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
-    num_epochs = 1
+    scaler = GradScaler()
+    num_epochs = 10
 
     model.train()
     for epoch in range(num_epochs):
         running_loss = 0.0
+        correct_train = 0
+        total_train = 0
         for images, labels, _ in tqdm(train_loader, desc=f'Epoch {epoch + 1}/{num_epochs}', unit='batch'):
             images, labels = images.to(device), labels.to(device)
             optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels.float().unsqueeze(1))
-            loss.backward()
-            optimizer.step()
+            
+            with autocast():
+                outputs = model(images)
+                loss = criterion(outputs, labels.float().unsqueeze(1))
+
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
             running_loss += loss.item()
 
+            correct_train += calculate_accuracy(outputs, labels.float().unsqueeze(1))
+            total_train += 1
+
         scheduler.step()
-        print(f'Epoch [{epoch + 1}/{num_epochs}], Loss: {running_loss / len(train_loader)}')
+        train_accuracy = correct_train / total_train
+        print(f'Epoch [{epoch + 1}/{num_epochs}], Loss: {running_loss / len(train_loader)}, Accuracy: {train_accuracy}')
 
     torch.save(model.state_dict(), 'model_weights.pth')
 
@@ -123,12 +141,22 @@ def main():
     predictions = []
     image_ids = []
     with torch.no_grad():
+        correct_val = 0
+        total_val = 0
         for images, _, file_name in tqdm(test_loader, desc='Inference', unit='batch'):
             images = images.to(device)
-            outputs = model(images)
+            with autocast():
+                outputs = model(images)
             preds = torch.sigmoid(outputs).cpu().numpy()
             predictions.extend(preds)
-            image_ids.append(file_name)
+            image_ids.append(file_name[0])  # Use file_name[0] to get the string part of the tuple
+
+            labels_dummy = torch.zeros_like(outputs).to(device)  # Dummy labels for test set
+            correct_val += calculate_accuracy(outputs, labels_dummy)
+            total_val += 1
+
+        val_accuracy = correct_val / total_val
+        print(f'Validation Accuracy: {val_accuracy}')
 
     predictions = [1 if p >= 0.5 else 0 for p in predictions]
     image_ids = [file_name.split('.')[0] for file_name in image_ids]  # Remove .pkl extension
