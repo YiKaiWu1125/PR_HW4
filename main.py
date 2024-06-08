@@ -58,16 +58,19 @@ class BagClassifier(nn.Module):
         super(BagClassifier, self).__init__()
         self.feature_extractor = models.resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
         self.feature_extractor.fc = nn.Identity()  # Remove the final layer
-        self.classifier = nn.Linear(2048, 1)
-        self.dropout = nn.Dropout(0.5)  # Add dropout for regularization
+        self.classifier = nn.Sequential(
+            nn.Linear(2048, 512),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(512, 1)
+        )
 
     def forward(self, x):
         batch_size, num_images, c, h, w = x.size()
         x = x.view(batch_size * num_images, c, h, w)
         features = self.feature_extractor(x)
         features = features.view(batch_size, num_images, -1)
-        features = features.mean(dim=1)  # Average over all images in the bag
-        features = self.dropout(features)  # Apply dropout
+        features = features.max(dim=1)[0]  # Max pooling over all images in the bag
         output = self.classifier(features)
         return output
 
@@ -95,7 +98,7 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = BagClassifier().to(device)
     criterion = nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    optimizer = optim.Adam(model.parameters(), lr=0.0001)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
     num_epochs = 1
 
