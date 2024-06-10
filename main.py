@@ -182,7 +182,7 @@ def main():
     predictions = [1 if p >= 0.5 else 0 for p in predictions]
     image_ids = [file_name.split('.')[0] for file_name in image_ids]  # Remove .pkl extension
     submission = pd.DataFrame({'image_id': image_ids, 'y_pred': predictions})
-    submission.to_csv(f'output/{val_accuracy}_{train_accuracy}_{num_epochs}_{running_loss / len(train_loader)}submission_v2.csv', index=False)
+    submission.to_csv(f'output/{val_accuracy}_{num_epochs}_{train_accuracy}_{running_loss / len(train_loader)}submission_v2.csv', index=False)
 
 if __name__ == "__main__":
     main()
