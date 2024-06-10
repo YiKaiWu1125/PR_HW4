@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, random_split
 from torchvision import transforms, models
-from torchvision.models import ResNet18_Weights
+from torchvision.models import ResNet50_Weights
 import pandas as pd
 from tqdm import tqdm
 import numpy as np
@@ -57,7 +57,7 @@ class BagDataset(Dataset):
 class BagClassifier(nn.Module):
     def __init__(self):
         super(BagClassifier, self).__init__()
-        self.feature_extractor = models.resnet50(weights=ResNet18_Weights.IMAGENET1K_V1)
+        self.feature_extractor = models.resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
         self.feature_extractor.fc = nn.Identity()  # Remove the final layer
         self.classifier = nn.Sequential(
             nn.Linear(2048, 128),
@@ -112,7 +112,7 @@ def main():
     scaler = GradScaler()
     # delete 
     import random
-    num_epochs = random.randint(5, 30)
+    num_epochs = random.randint(5, 20)
     #num_epochs = 1
 
     model.train()
@@ -155,7 +155,7 @@ def main():
         print(f'Validation Accuracy: {val_accuracy}')
         model.train()
 
-    torch.save(model.state_dict(), f'output_weights\{val_accuracy}_{num_epochs}_model_weight_big.pth')
+    torch.save(model.state_dict(), f'ouput_weights\{val_accuracy}_{num_epochs}_odel_weight_big.pth')
 
     test_dataset = BagDataset(root_dir=r'C:\Users\YK\Desktop\1hw4\PR_HW4\released\test', transform=transform, is_test=True)
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
