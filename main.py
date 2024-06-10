@@ -11,6 +11,9 @@ from tqdm import tqdm
 import numpy as np
 from torch.cuda.amp import GradScaler, autocast
 
+test_dir = 
+train_dir = 
+
 class BagDataset(Dataset):
     def __init__(self, root_dir, transform=None, is_test=False):
         self.root_dir = root_dir
@@ -96,7 +99,7 @@ def main():
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     ])
 
-    dataset = BagDataset(root_dir=r'C:\Users\YK\Desktop\1hw4\PR_HW4\released\train', transform=transform)
+    dataset = BagDataset(root_dir=train_dir, transform=transform)
     train_size = int(0.8 * len(dataset))
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
@@ -157,7 +160,7 @@ def main():
 
     torch.save(model.state_dict(), f'ouput_weights\{val_accuracy}_{num_epochs}_odel_weight.pth')
 
-    test_dataset = BagDataset(root_dir=r'C:\Users\YK\Desktop\1hw4\PR_HW4\released\test', transform=transform, is_test=True)
+    test_dataset = BagDataset(root_dir=test_dir, transform=transform, is_test=True)
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
     model.eval()
