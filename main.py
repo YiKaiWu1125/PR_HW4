@@ -11,8 +11,8 @@ from tqdm import tqdm
 import numpy as np
 from torch.cuda.amp import GradScaler, autocast
 
-test_dir = 
-train_dir = 
+test_dir = r'C:\Users\\test'
+train_dir = r'C:\Users\\train'
 
 class BagDataset(Dataset):
     def __init__(self, root_dir, transform=None, is_test=False):
@@ -100,10 +100,10 @@ def main():
     ])
 
     dataset = BagDataset(root_dir=train_dir, transform=transform)
-    train_size = int(0.8 * len(dataset))
+    train_size = int(0.95 * len(dataset))
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
-
+    val_dataset = dataset
     train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False)
 
@@ -115,7 +115,7 @@ def main():
     scaler = GradScaler()
     # delete 
     import random
-    num_epochs = random.randint(5, 20)
+    num_epochs = random.randint(20, 30)
     #num_epochs = 1
 
     model.train()
@@ -157,6 +157,10 @@ def main():
         val_accuracy = correct_val / total_val
         print(f'Validation Accuracy: {val_accuracy}')
         model.train()
+        if val_accuracy == 1.0 and train_accuracy == 1.0 and running_loss / len(train_loader) < 0.01:
+            print("stop train")
+            num_epochs = epoch +1
+            break
 
     torch.save(model.state_dict(), f'ouput_weights\{val_accuracy}_{num_epochs}_odel_weight.pth')
 
@@ -178,7 +182,7 @@ def main():
     predictions = [1 if p >= 0.5 else 0 for p in predictions]
     image_ids = [file_name.split('.')[0] for file_name in image_ids]  # Remove .pkl extension
     submission = pd.DataFrame({'image_id': image_ids, 'y_pred': predictions})
-    submission.to_csv(f'output/{val_accuracy}_{num_epochs}_{running_loss / len(train_loader)}submission_1.csv', index=False)
+    submission.to_csv(f'output/{val_accuracy}_{train_accuracy}_{num_epochs}_{running_loss / len(train_loader)}submission_v2.csv', index=False)
 
 if __name__ == "__main__":
     main()
