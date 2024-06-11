@@ -11,8 +11,9 @@ from tqdm import tqdm
 import numpy as np
 from torch.cuda.amp import GradScaler, autocast
 
-test_dir = r'C:\Users\\test'
-train_dir = r'C:\Users\\train'
+test_dir = r'C:\Users\YK\Desktop\1hw4\PR_HW4\released\test'
+train_dir = r'C:\Users\YK\Desktop\1hw4\PR_HW4\released\train'
+time = 0
 
 class BagDataset(Dataset):
     def __init__(self, root_dir, transform=None, is_test=False):
@@ -115,8 +116,8 @@ def main():
     scaler = GradScaler()
     # delete 
     import random
-    num_epochs = random.randint(20, 30)
-    #num_epochs = 1
+    #num_epochs = random.randint(30, 40)
+    num_epochs = 40
 
     model.train()
     for epoch in range(num_epochs):
@@ -157,10 +158,18 @@ def main():
         val_accuracy = correct_val / total_val
         print(f'Validation Accuracy: {val_accuracy}')
         model.train()
+        
         if val_accuracy == 1.0 and train_accuracy == 1.0 and running_loss / len(train_loader) < 0.01:
-            print("stop train")
-            num_epochs = epoch +1
-            break
+            time += 1
+            if time >= 2:
+                print("------------------------------------------")
+                print("stop train")
+                print("------------------------------------------")
+                num_epochs = epoch +1
+                break
+        else :
+            time = 0
+
 
     torch.save(model.state_dict(), f'ouput_weights\{val_accuracy}_{num_epochs}_odel_weight.pth')
 
@@ -182,7 +191,7 @@ def main():
     predictions = [1 if p >= 0.5 else 0 for p in predictions]
     image_ids = [file_name.split('.')[0] for file_name in image_ids]  # Remove .pkl extension
     submission = pd.DataFrame({'image_id': image_ids, 'y_pred': predictions})
-    submission.to_csv(f'output/{val_accuracy}_{num_epochs}_{train_accuracy}_{running_loss / len(train_loader)}submission_v3.csv', index=False)
+    submission.to_csv(f'output/{val_accuracy}_{num_epochs}_{train_accuracy}_{running_loss / len(train_loader)}submission_v4.csv', index=False)
 
 if __name__ == "__main__":
     main()
